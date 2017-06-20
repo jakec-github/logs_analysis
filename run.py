@@ -1,4 +1,4 @@
-# Python 3.5.2
+#!/usr/bin/env python3
 
 import psycopg2
 
@@ -9,35 +9,27 @@ DBNAME = "news"
 runner = True
 
 
-# Prints the three most popular articles
-def popular_articles():
+def execute_query(query):
+    """ Execute_query takes an SQL query as a parameter.
+    Executes the query and returns the results as a list of tuples """
+    try:
+        db = psycopg2.connect(database=DBNAME)
+        c = db.cursor()
+        c.execute(query)
+        response = c.fetchall()
+        db.close()
+        return response
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(error)
+    finally:
+        if c is not None:
+            db.close()
+
+
+def menu_options():
+    """ Menu to display after a query """
     global runner
 
-    # Opens the database
-    db = psycopg2.connect(database=DBNAME)
-    c = db.cursor()
-
-    # SQL query
-    c.execute("""
-    SELECT title, count(*)
-    FROM log, articles
-    WHERE log.path = '/article/' || articles.slug
-    AND path LIKE '/article/%'
-    GROUP BY 1
-    ORDER BY 2 DESC
-    LIMIT 3;
-    """)
-
-    # Post-processing and printing of the query
-    response = c.fetchall()
-    db.close()
-    count = 1
-    print("")
-    for n in response:
-        print(str(count) + ") " + n[0] + ". - " + str(n[1]) + " views")
-        count += 1
-
-    # Menu options
     print("")
     print("Enter M for the menu or Q to quit")
     option = str(input("-> ")).lower()
@@ -45,16 +37,39 @@ def popular_articles():
         runner = False
 
 
-# Prints the authors sorted by article views
+def popular_articles():
+    """ Prints the three most popular articles """
+
+    # Retrieves data
+    query = """
+    SELECT title, numViews
+    FROM articles,
+        (select path, count(path) as numViews
+                       from log
+                       where status like '%200%'
+                       group by log.path) as log
+    WHERE log.path = '/article/' || articles.slug
+    AND path LIKE '/article/%'
+    ORDER BY numViews DESC
+    LIMIT 3;
+    """
+    response = execute_query(query)
+
+    # Post-processing and printing of the query
+    count = 1
+    print("")
+    for title, numViews in response:
+        print("{}) {}. - {} views".format(str(count), title, str(numViews)))
+        count += 1
+
+    menu_options()
+
+
 def author_views():
-    global runner
+    """ Prints the authors sorted by article views """
 
-    # Opens the database
-    db = psycopg2.connect(database=DBNAME)
-    c = db.cursor()
-
-    # SQL query
-    c.execute("""
+    # Retrieves data
+    query = """
     SELECT name, views
     FROM authors,
     (
@@ -65,35 +80,24 @@ def author_views():
     ) AS viewcount
     WHERE author = authors.id
     ORDER BY views DESC;
-    """)
+    """
+    response = execute_query(query)
 
     # Post-processing and printing of the query
-    response = c.fetchall()
-    db.close()
     count = 1
     print("")
-    for n in response:
-        print(str(count) + ") " + n[0] + " - " + str(n[1]) + " views")
+    for name, numViews in response:
+        print("{}) {} - {} views".format(str(count), name, str(numViews)))
         count += 1
 
-    # Menu options
-    print("")
-    print("Enter M for the menu or Q to quit")
-    option = str(input("-> ")).lower()
-    if option == "q":
-        runner = False
+    menu_options()
 
 
-# Prints any dates with an error rate over 1%
 def error_rate():
-    global runner
+    """ Prints any dates with an error rate over 1% """
 
-    # Opens the database
-    db = psycopg2.connect(database=DBNAME)
-    c = db.cursor()
-
-    # SQL query
-    c.execute("""
+    # Retrieves data
+    query = """
     SELECT * FROM (
       SELECT requests.date,
       ROUND(fails.number*1.0/requests.number*100.0, 2)
@@ -113,23 +117,19 @@ def error_rate():
       ORDER BY failure_percentage DESC
     ) AS results
     WHERE failure_percentage > 1;
-    """)
+    """
+    response = execute_query(query)
 
     # Post-processing and printing of the query
-    response = c.fetchall()
-    db.close()
     print("")
-    for n in response:
-        print(str(n[0]) + " - " + str(n[1]) + "%")
-    print("")
-    print("Enter M for the menu or Q to quit")
-    option = str(input("-> ")).lower()
-    if option == "q":
-        runner = False
+    for date, errors in response:
+        print("{} - {}%".format(str(date), str(errors)))
+
+    menu_options()
 
 
-#  Program runner
 def run():
+    """ Program runner """
     global runner
     while runner:
         print("")
@@ -163,4 +163,5 @@ def run():
                 print("")
 
 
-run()
+if __name__ == '__main__':
+    run()
